@@ -1,10 +1,15 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { errorHandler } from './middleware/errorHandler.js';
 import prisma from './lib/prisma.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,10 +49,14 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(limiter);
 app.use(requestLogger);
+
+// Serve static files from the React app
+app.use(express.static(path.resolve(__dirname, '../../client/dist')));
 
 // Validation middleware
 const validateMessage = (req: Request, res: Response, next: NextFunction) => {
@@ -154,6 +163,11 @@ app.delete('/message/:id', async (req: Request, res: Response) => {
     console.error('[Database Error]:', error);
     res.status(500).json({ error: 'Failed to delete message' });
   }
+});
+
+// Handle React routing, return all requests to React app
+app.get('*', (req: Request, res: Response) => {
+  res.sendFile(path.resolve(__dirname, '../../client/dist/index.html'));
 });
 
 app.use(errorHandler);
