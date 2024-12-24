@@ -11,4 +11,8 @@ cmds = [
 ]
 
 [start]
-cmd = 'cd server && npm start'
+cmd = 'cd server && NODE_ENV=production npm start'
+
+[start.environment]
+PORT = "3000"
+NODE_ENV = "production"

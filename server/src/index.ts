@@ -14,6 +14,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enhanced error handling for uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
@@ -56,7 +66,9 @@ app.use(limiter);
 app.use(requestLogger);
 
 // Serve static files from the React app
-app.use(express.static(path.resolve(__dirname, '../../client/dist')));
+const clientPath = path.resolve(__dirname, '../../client/dist');
+console.log('Serving static files from:', clientPath);
+app.use(express.static(clientPath));
 
 // Validation middleware
 const validateMessage = (req: Request, res: Response, next: NextFunction) => {
@@ -167,19 +179,32 @@ app.delete('/message/:id', async (req: Request, res: Response) => {
 
 // Handle React routing, return all requests to React app
 app.get('*', (req: Request, res: Response) => {
-  res.sendFile(path.resolve(__dirname, '../../client/dist/index.html'));
+  const indexPath = path.join(clientPath, 'index.html');
+  console.log('Serving index.html from:', indexPath);
+  res.sendFile(indexPath);
 });
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log('----------------------------------------');
-  console.log(`[${new Date().toISOString()}] Server started`);
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log('Environment variables loaded:');
-  console.log('- PORT:', PORT);
-  console.log('- RATE_LIMIT_WINDOW_MS:', process.env.RATE_LIMIT_WINDOW_MS || '60000 (default)');
-  console.log('- RATE_LIMIT_MAX_REQUESTS:', process.env.RATE_LIMIT_MAX_REQUESTS || '100 (default)');
-  console.log('- MAX_MESSAGE_LENGTH:', process.env.MAX_MESSAGE_LENGTH || '500 (default)');
-  console.log('----------------------------------------');
-});
+// Start server with enhanced error handling
+const startServer = async () => {
+  try {
+    await prisma.$connect();
+    app.listen(PORT, () => {
+      console.log('----------------------------------------');
+      console.log(`[${new Date().toISOString()}] Server started`);
+      console.log(`Server is running on http://localhost:${PORT}`);
+      console.log('Environment variables loaded:');
+      console.log(`- PORT: ${PORT}`);
+      console.log(`- RATE_LIMIT_WINDOW_MS: ${process.env.RATE_LIMIT_WINDOW_MS || '60000'}`);
+      console.log(`- RATE_LIMIT_MAX_REQUESTS: ${process.env.RATE_LIMIT_MAX_REQUESTS || '100'}`);
+      console.log(`- MAX_MESSAGE_LENGTH: ${process.env.MAX_MESSAGE_LENGTH || '500'}`);
+      console.log('----------------------------------------');
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
