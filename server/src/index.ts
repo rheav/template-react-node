@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
@@ -11,19 +11,21 @@ const PORT = process.env.PORT || 3000;
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100')
 });
 
 // Message schema validation
 const messageSchema = z.object({
   message: z.string()
     .min(1, 'Message cannot be empty')
-    .max(parseInt(process.env.MAX_MESSAGE_LENGTH) || 500, 'Message is too long')
+    .max(parseInt(process.env.MAX_MESSAGE_LENGTH || '500'), 'Message is too long')
 });
 
+type MessageBody = z.infer<typeof messageSchema>;
+
 // Logger middleware
-const requestLogger = (req, res, next) => {
+const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${req.method} ${req.path}`);
   console.log('Headers:', JSON.stringify(req.headers, null, 2));
@@ -33,7 +35,7 @@ const requestLogger = (req, res, next) => {
   
   // Log response
   const originalSend = res.send;
-  res.send = function (body) {
+  res.send = function (body: any) {
     console.log(`[${timestamp}] Response:`, typeof body === 'string' ? body : JSON.stringify(body, null, 2));
     console.log('----------------------------------------');
     return originalSend.call(this, body);
@@ -48,17 +50,21 @@ app.use(limiter);
 app.use(requestLogger);
 
 // Validation middleware
-const validateMessage = (req, res, next) => {
+const validateMessage = (req: Request, res: Response, next: NextFunction) => {
   try {
     messageSchema.parse(req.body);
     next();
   } catch (error) {
-    console.error('[Validation Error]:', error.errors);
-    next({ type: 'validation', errors: error.errors });
+    if (error instanceof z.ZodError) {
+      console.error('[Validation Error]:', error.errors);
+      next({ type: 'validation', errors: error.errors });
+    } else {
+      next(error);
+    }
   }
 };
 
-app.get('/', (req, res) => {
+app.get('/', (req: Request, res: Response) => {
   console.log('[Event] Root endpoint accessed');
   res.json({ 
     message: 'Server is running',
@@ -70,9 +76,9 @@ app.get('/', (req, res) => {
 });
 
 // Create a new message
-app.post('/message', validateMessage, async (req, res) => {
+app.post('/message', validateMessage, async (req: Request, res: Response) => {
   try {
-    const { message } = req.body;
+    const { message } = req.body as MessageBody;
     
     console.log('[Event] New message received:', {
       message,
@@ -97,7 +103,7 @@ app.post('/message', validateMessage, async (req, res) => {
 });
 
 // Get all messages
-app.get('/messages', async (req, res) => {
+app.get('/messages', async (req: Request, res: Response) => {
   try {
     const messages = await prisma.message.findMany({
       orderBy: {
@@ -113,7 +119,7 @@ app.get('/messages', async (req, res) => {
 });
 
 // Get a single message by ID
-app.get('/message/:id', async (req, res) => {
+app.get('/message/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const message = await prisma.message.findUnique({
@@ -134,7 +140,7 @@ app.get('/message/:id', async (req, res) => {
 });
 
 // Delete a message
-app.delete('/message/:id', async (req, res) => {
+app.delete('/message/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.message.delete({
