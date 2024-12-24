@@ -2,10 +2,14 @@
 nixPkgs = ['nodejs', 'postgresql']
 
 [phases.install]
-cmds = ['npm run install:all']
+cmds = ['npm install']
 
 [phases.build]
-cmds = ['npm run prisma:generate', 'npm run build']
+cmds = [
+    'cd server && npx prisma generate',
+    'cd client && npm install && npm run build',
+    'cd server && npm install && npm run build'
+]
 
 [start]
-cmd = 'npm start'
+cmd = 'cd server && npm start'
