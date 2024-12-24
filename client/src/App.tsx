@@ -10,11 +10,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { MessageSquare, RefreshCcw, AlertCircle } from "lucide-react";
+import { MessageSquare, RefreshCcw, AlertCircle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { Skeleton } from "@/components/ui/skeleton";
 import * as api from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function App() {
   const [message, setMessage] = useState("");
@@ -22,6 +32,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<number | null>(null);
   const { toast } = useToast();
 
   const fetchMessages = async () => {
@@ -73,6 +84,26 @@ function App() {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    try {
+      await api.deleteMessage(id);
+      setMessages((prev) => prev.filter((msg) => msg.id !== id));
+      toast({
+        title: "Message deleted",
+        description: "Message was successfully deleted",
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error deleting message",
+        description:
+          err instanceof Error ? err.message : "Failed to delete message",
+      });
+    } finally {
+      setMessageToDelete(null);
+    }
+  };
+
   return (
     <>
       <div className="min-h-screen bg-gray-100 p-4">
@@ -104,65 +135,85 @@ function App() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div>
-                <CardTitle>Message History</CardTitle>
-                <CardDescription>
-                  Recent messages exchanged with the server
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={fetchMessages}
-                disabled={refreshing}
-              >
-                <RefreshCcw
-                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-                />
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {refreshing ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </div>
-                ))
-              ) : messages.length > 0 ? (
-                messages.map((msg) => (
-                  <Alert key={msg.id}>
-                    <MessageSquare className="h-4 w-4" />
-                    <AlertTitle>
-                      Message {new Date(msg.timestamp).toLocaleTimeString()}
-                    </AlertTitle>
-                    <AlertDescription className="mt-2 space-y-2">
-                      <p>
-                        <strong>Sent:</strong> {msg.received}
-                      </p>
-                      <p>
-                        <strong>Response:</strong> {msg.serverResponse}
-                      </p>
-                    </AlertDescription>
-                  </Alert>
-                ))
-              ) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No messages yet. Start the conversation!
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-muted-foreground">Message History</h3>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={fetchMessages}
+                    disabled={refreshing}
+                    className="h-8 w-8"
+                  >
+                    <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  </Button>
                 </div>
-              )}
+
+                {refreshing ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="space-y-3">
+                      <Skeleton className="h-4 w-[250px]" />
+                      <Skeleton className="h-4 w-[200px]" />
+                    </div>
+                  ))
+                ) : messages.length > 0 ? (
+                  messages.map((msg) => (
+                    <Alert key={msg.id} variant="default" className="bg-white/50 backdrop-blur-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4" />
+                            <AlertTitle className="text-sm font-medium">
+                              Message {msg.id} • {new Date(msg.createdAt).toLocaleTimeString()}
+                            </AlertTitle>
+                          </div>
+                          <AlertDescription className="mt-2 space-y-1 text-sm">
+                            <p className="text-muted-foreground">{msg.content}</p>
+                          </AlertDescription>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => setMessageToDelete(msg.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </Alert>
+                  ))
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    No messages yet. Send one to get started!
+                  </div>
+                )}
+              </div>
             </CardContent>
-            <CardFooter className="text-sm text-muted-foreground">
-              Messages are processed through the Express server
-            </CardFooter>
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={messageToDelete !== null} onOpenChange={() => setMessageToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the message.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => messageToDelete && handleDelete(messageToDelete)}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Toaster />
     </>
   );

@@ -4,6 +4,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { errorHandler } from './middleware/errorHandler.js';
+import prisma from './lib/prisma.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,10 +21,6 @@ const messageSchema = z.object({
     .min(1, 'Message cannot be empty')
     .max(parseInt(process.env.MAX_MESSAGE_LENGTH) || 500, 'Message is too long')
 });
-
-// Store recent messages (in-memory storage)
-const messageHistory = [];
-const MAX_HISTORY = 100;
 
 // Logger middleware
 const requestLogger = (req, res, next) => {
@@ -72,47 +69,87 @@ app.get('/', (req, res) => {
   });
 });
 
-app.post('/message', validateMessage, (req, res) => {
-  const { message } = req.body;
-  const timestamp = new Date();
-  
-  console.log('[Event] New message received:', {
-    message,
-    timestamp: timestamp.toISOString(),
-    clientIP: req.ip,
-    userAgent: req.get('user-agent')
-  });
-  
-  const response = {
-    id: Date.now(),
-    received: message,
-    serverResponse: `Server processed: ${message} at ${timestamp.toLocaleTimeString()}`,
-    timestamp
-  };
+// Create a new message
+app.post('/message', validateMessage, async (req, res) => {
+  try {
+    const { message } = req.body;
+    
+    console.log('[Event] New message received:', {
+      message,
+      timestamp: new Date().toISOString(),
+      clientIP: req.ip,
+      userAgent: req.get('user-agent')
+    });
+    
+    // Save message to database
+    const savedMessage = await prisma.message.create({
+      data: {
+        content: message
+      }
+    });
 
-  // Add to history and maintain max size
-  messageHistory.unshift(response);
-  if (messageHistory.length > MAX_HISTORY) {
-    console.log('[Event] Message history truncated, removed oldest message');
-    messageHistory.pop();
+    console.log('[Event] Message saved to database:', savedMessage);
+    res.json(savedMessage);
+  } catch (error) {
+    console.error('[Database Error]:', error);
+    res.status(500).json({ error: 'Failed to save message' });
   }
-
-  console.log('[Event] Message processed successfully');
-  res.json(response);
 });
 
-app.get('/messages', (req, res) => {
-  const limit = parseInt(req.query.limit) || 10;
-  console.log('[Event] Message history requested', {
-    limit,
-    totalMessages: messageHistory.length,
-    returnedMessages: Math.min(limit, messageHistory.length)
-  });
-  
-  res.json(messageHistory.slice(0, limit));
+// Get all messages
+app.get('/messages', async (req, res) => {
+  try {
+    const messages = await prisma.message.findMany({
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    res.json(messages);
+  } catch (error) {
+    console.error('[Database Error]:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
 });
 
-// Error handling middleware
+// Get a single message by ID
+app.get('/message/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const message = await prisma.message.findUnique({
+      where: {
+        id: parseInt(id)
+      }
+    });
+    
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    
+    res.json(message);
+  } catch (error) {
+    console.error('[Database Error]:', error);
+    res.status(500).json({ error: 'Failed to fetch message' });
+  }
+});
+
+// Delete a message
+app.delete('/message/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.message.delete({
+      where: {
+        id: parseInt(id)
+      }
+    });
+    
+    res.json({ message: 'Message deleted successfully' });
+  } catch (error) {
+    console.error('[Database Error]:', error);
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
 app.use(errorHandler);
 
 app.listen(PORT, () => {

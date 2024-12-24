@@ -1,8 +1,8 @@
 export interface MessageResponse {
   id: number;
-  received: string;
-  serverResponse: string;
-  timestamp: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiError {
@@ -11,7 +11,7 @@ export interface ApiError {
   message?: string;
 }
 
-const API_BASE = '/api';
+const API_BASE = 'http://localhost:3000';
 
 export async function sendMessage(message: string): Promise<MessageResponse> {
   const response = await fetch(`${API_BASE}/message`, {
@@ -39,4 +39,15 @@ export async function getMessages(limit: number = 10): Promise<MessageResponse[]
   }
 
   return response.json();
+}
+
+export async function deleteMessage(id: number): Promise<void> {
+  const response = await fetch(`${API_BASE}/message/${id}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to delete message');
+  }
 }
